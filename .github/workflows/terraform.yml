@@ -1,42 +1,57 @@
-name: Terraform
+name: Terraform EC2 Instance Deployment
 
 on:
   push:
-    branches: [ "main" ]  # Trigger on pushes to the 'main' branch
+    branches:
+      - main  # Trigger on pushes to the 'main' branch
+  pull_request:
+    branches:
+      - main  # Trigger on PR to the 'main' branch
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    name: Terraform
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DEVOPS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEVOPS_SECRET_ACCESS_KEY }}
-    environment: production
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Terraform Init
-      uses: hashicorp/terraform-github-action@master
-      with:
-         tf_actions_version: 0.14.3
-         tf_actions_subcommand: 'init'
-         tf_actions_working_dir: '.'
-         tf_actions_comment: true 
+      # Step 2: Set up Terraform
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: '1.5.4'  # Specify your desired Terraform version
 
-    - name: Terraform plan
-      uses: hashicorp/terraform-github-action@master
-      with:
-         tf_actions_version: 0.14.3
-         tf_actions_subcommand: 'plan'
-         tf_actions_working_dir: '.'
-         tf_actions_comment: true 
+      # Step 3: Cache Terraform modules and provider plugins
+      - name: Cache Terraform modules and provider plugins
+        uses: actions/cache@v2
+        with:
+          path: ~/.terraform.d
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/*.tf') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
 
-    - name: Terraform apply
-      uses: hashicorp/terraform-github-action@master
-      with:
-         tf_actions_version: 0.14.3
-         tf_actions_subcommand: 'apply'
-         tf_actions_working_dir: '.'
-         tf_actions_comment: true 
+      # Step 4: Set up AWS credentials (GitHub secrets)
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws_access_key_id: ${{ secrets.AWS_DEVOPS_ACCESS_KEY_ID }}  # Add AWS Access Key as a secret
+          aws_secret_access_key: ${{ secrets.AWS_DEVOPS_SECRET_ACCESS_KEY }}  # Add AWS Secret Key as a secret
+          aws_region: 'ap-south-1'  # Set your AWS region
+
+      # Step 5: Initialize Terraform
+      - name: Terraform Init
+        run: terraform init
+
+      # Step 6: Validate Terraform files
+      - name: Terraform Validate
+        run: terraform validate
+
+      # Step 7: Plan Terraform changes
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      # Step 8: Apply Terraform changes
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan 
